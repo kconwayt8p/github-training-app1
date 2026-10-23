@@ -1,0 +1,66 @@
+// File location: src/utils/webrtc-config.ts & SuperUserTelemetry.tsx
+
+const METERED_API_KEY = "8100ec0c5a3f4d8b934de128f649d2579f77";
+let cachedIceServers = null;
+
+// Dynamic ICE Server Fetcher with Local Caching & Robust Fallbacks
+export async function getIceServers() {
+    if (cachedIceServers) return cachedIceServers;
+    try {
+        const response = await fetch(`https://plusplus.metered.live/api/v1/turn/credentials?apiKey=${METERED_API_KEY}`);
+        if (response.ok) {
+            cachedIceServers = await response.json();
+            return cachedIceServers;
+        }
+    } catch (error) {
+        console.warn("Dynamic TURN fetch failed, falling back to static credentials:", error);
+    }
+    
+    // Complete Static Fallback Array matching Android PTT App
+    cachedIceServers = [
+        { urls: "stun:stun.relay.metered.ca:80" },
+        {
+            urls: [
+                "turn:global.relay.metered.ca:80",
+                "turn:global.relay.metered.ca:80?transport=tcp",
+                "turn:global.relay.metered.ca:443",
+                "turns:global.relay.metered.ca:443?transport=tcp"
+            ],
+            username: "811f9123cb955ce746426436",
+            credential: "EJ3Ry+ZpqqQxfyHA"
+        }
+    ];
+    return cachedIceServers;
+}
+
+// Super User Web Interface Telemetry & Detection Component
+export function SuperUserMeteredTelemetry({ peerConnection, isSuperUser = true }) {
+    const [traffic, setTraffic] = React.useState({ incomingKbps: 0, outgoingKbps: 0 });
+
+    React.useEffect(() => {
+        if (!isSuperUser || !peerConnection) return;
+        const interval = setInterval(async () => {
+            const stats = await getMeteredNetworkKbps(peerConnection);
+            setTraffic(stats);
+        }, 1000);
+        return () => clearInterval(interval);
+    }, [peerConnection, isSuperUser]);
+
+    if (!isSuperUser) return null;
+
+    return (
+        <div className="super-user-metered-box bg-slate-900 border border-red-500 p-4 rounded text-white font-mono text-xs">
+            <h3 className="text-red-400 font-bold mb-2">⚡ SUPER USER METERED RELAY TELEMETRY</h3>
+            <div className="grid grid-cols-2 gap-4">
+                <div className="bg-slate-800 p-2 rounded">
+                    <span className="text-gray-400 block">INCOMING (Server/Peers):</span>
+                    <span className="text-green-400 text-lg font-bold">{traffic.incomingKbps} kbps</span>
+                </div>
+                <div className="bg-slate-800 p-2 rounded">
+                    <span className="text-gray-400 block">OUTGOING (Server/Peers):</span>
+                    <span className="text-cyan-400 text-lg font-bold">{traffic.outgoingKbps} kbps</span>
+                </div>
+            </div>
+        </div>
+    );
+}
